@@ -19,8 +19,6 @@
 
 #include "usb/usbhid.h"
 
-#include "wireless/wireless.h"
-
 #define TPD_REPORT_SIZE   6
 
 static const char *TAG = "USB_HID_TP";
@@ -127,12 +125,12 @@ void usb_mount_task(void *arg) {
                     // elan_activate_mouse();
                     break;
                 case 0x00:
-                    if (wireless_mode == 1) {
+                    // if (wireless_mode == 1) {
                         ESP_LOGI(TAG, "Mode 0x01 detected: Activating ELAN MOUSE");
                         current_mode = MOUSE_MODE;
                         elan_activate_mouse();
                         break;
-                    }
+                    // }
                 default:
                     break;
                 }
@@ -176,15 +174,17 @@ void usbhid_task(void *arg) {
 
                 // ESP_LOGI(TAG, "X: %d, y:%d", report.x, report.y);
 
-                if (wireless_mode == 1) {
-                    if (tud_hid_n_ready(1)) {
-                        tud_hid_n_report(1, REPORTID_MOUSE, &report, sizeof(report));
-                    } 
-                } else {
-                    pkt.type = MOUSE_MODE;
-                    pkt.payload.mouse = report;
-                    esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
-                }
+                if (tud_hid_n_ready(1)) {
+                    tud_hid_n_report(1, REPORTID_MOUSE, &report, sizeof(report));
+                } 
+
+                // if (wireless_mode == 1) {
+                    
+                // } else {
+                //     pkt.type = MOUSE_MODE;
+                //     pkt.payload.mouse = report;
+                //     esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
+                // }
             }
         } else if (xActivatedMember == tp_queue) {
             if (xQueueReceive(tp_queue, &msg, portMAX_DELAY)) {
@@ -222,15 +222,17 @@ void usbhid_task(void *arg) {
 
                 report.buttons = (msg.button_mask > 0) ? 0x01 : 0x00;
 
-                if (wireless_mode == 1) {
-                    if (tud_hid_n_ready(0)) {
-                        tud_hid_n_report(0, REPORTID_TOUCHPAD, &report, sizeof(report));
-                    }
-                } else {
-                    pkt.type = PTP_MODE;
-                    pkt.payload.ptp = report;
-                    esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
+                if (tud_hid_n_ready(0)) {
+                    tud_hid_n_report(0, REPORTID_TOUCHPAD, &report, sizeof(report));
                 }
+
+                // if (wireless_mode == 1) {
+                    
+                // } else {
+                //     pkt.type = PTP_MODE;
+                //     pkt.payload.ptp = report;
+                //     esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
+                // }
             }
         }
     }

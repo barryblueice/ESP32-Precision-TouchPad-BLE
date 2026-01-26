@@ -1,9 +1,9 @@
-menu "TouchPad Wireless Configuration"
+menu "TouchPad BLE Configuration"
 
-    config RECEIVER_MAC_ADDR
-        string "Receiver MAC Address"
-        default "FF:FF:FF:FF:FF:FF"
+    config BLE_DEVICE_NAME
+        string "TouchPad BLE Mode Device Name"
+        default "R-SODIUM BLE Precision TouchPad"
         help
-            Enter the MAC address of your PTP 2.4G Reciever in XX:XX:XX:XX:XX:XX format.
+            Set the device name for BLE mode.
 
 endmenu

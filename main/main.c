@@ -6,7 +6,7 @@
 #include "tinyusb.h"
 #include "i2c/elan_i2c.h"
 #include "nvs/ptp_nvs.h"
-#include "wireless/wireless.h"
+#include "ble/ble.h"
 
 void app_main(void) {
 
@@ -26,12 +26,14 @@ void app_main(void) {
     
     xTaskCreate(usb_mount_task, "mode_sel", 4096, NULL, 11, NULL);
     
-    vbus_det_init();
+    // vbus_det_init();
 
     usbhid_init();
 
     xTaskCreate(elan_i2c_task, "elan_i2c", 4096, NULL, 10, NULL);
-    xTaskCreate(usbhid_task, "hid", 4096, NULL, 12, NULL);
+
+    ble_gatt_init();
+    // xTaskCreate(usbhid_task, "hid", 4096, NULL, 12, NULL);
 
     while (1) {
         tud_task(); 
