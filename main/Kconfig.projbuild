@@ -2,7 +2,7 @@ menu "TouchPad BLE Configuration"
 
     config BLE_DEVICE_NAME
         string "TouchPad BLE Mode Device Name"
-        default "R-SODIUM BLE Precision TouchPad"
+        default "R-SODIUM BLE PTP"
         help
             Set the device name for BLE mode.
 
