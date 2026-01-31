@@ -16,6 +16,12 @@ static uint8_t ref_max_cnt[] = {0x03, 0x03};
 static uint8_t ref_hqa[]     = {0x04, 0x03};
 static uint8_t ref_mode[]    = {0x05, 0x03};
 
+#define REF_ID_TOUCHPAD      1
+#define REF_ID_MOUSE         2
+#define REF_ID_MAX_COUNT     3
+#define REF_ID_PTPHQA        4
+#define REF_ID_INPUT_MODE    5
+
 extern const uint8_t ble_ptp_hid_report_descriptor[];
 extern const size_t ble_ptp_hid_report_descriptor_len;
 
@@ -25,6 +31,7 @@ static int gatt_svr_access_hid(uint16_t conn_handle, uint16_t attr_handle,
                                struct ble_gatt_access_ctxt *ctxt, void *arg) 
 {
     uint16_t uuid16 = ble_uuid_u16(ctxt->chr->uuid);
+    printf("Access Op: %d, UUID: 0x%04X, ID: %d\n", ctxt->op, uuid16, (int)arg);
 
     switch (uuid16) {
         case 0x2A4A: // HID Information: bcdHID(1.11), Country(0), Flags(RemoteWake|NormallyConnectable)
@@ -62,118 +69,78 @@ static int gatt_svr_access_hid(uint16_t conn_handle, uint16_t attr_handle,
         if (attr_handle == hid_max_count_handle + 1) return os_mbuf_append(ctxt->om, ref_max_cnt, 2);
     }
 
+    if (ctxt->op == BLE_GATT_ACCESS_OP_READ_DSC) {
+        printf("Windows is reading Descriptor! arg = %d\n", (int)arg);
+    }
+
     return 0;
 }
+
 const struct ble_gatt_svc_def gatt_svr_svcs[] = {
     {
-        /*** HID Service: 0x1812 ***/
         .type = BLE_GATT_SVC_TYPE_PRIMARY,
-        .uuid = BLE_UUID16_DECLARE(0x1812),
+        .uuid = BLE_UUID16_DECLARE(0x1812), // HID Service
         .characteristics = (struct ble_gatt_chr_def[]) {
-            
-            /** HID Information: 0x2A4A **/
+            /** 1. HID Information **/
             {
                 .uuid = BLE_UUID16_DECLARE(0x2A4A),
                 .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_READ,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
             },
-
-            /** Report Map: 0x2A4B **/
+            /** 2. Report Map (描述符主体) **/
             {
                 .uuid = BLE_UUID16_DECLARE(0x2A4B),
                 .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_READ,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
             },
-
-            /** Touchpad Input Report: 0x2A4D (ID 0x01) **/
+            /** 3. Touchpad Input Report (ID 1) **/
             {
-                .uuid = BLE_UUID16_DECLARE(0x2A4D), 
-                .access_cb = gatt_svr_access_hid, 
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
-                .val_handle = &hid_tp_in_handle, 
+                .uuid = BLE_UUID16_DECLARE(0x2A4D),
+                .access_cb = gatt_svr_access_hid,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_NOTIFY,
+                .val_handle = &hid_tp_in_handle,
                 .descriptors = (struct ble_gatt_dsc_def[]) {
-                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, .att_flags = BLE_ATT_F_READ }, 
+                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, 
+                      .arg = (void *)REF_ID_TOUCHPAD, .att_flags = BLE_ATT_F_READ },
                     { 0 }
                 }
             },
-
-            /** Max Count Feature Report: 0x2A4D (ID 0x03) **/
+            /** 4. Max Count Feature Report (ID 根据你宏定义的值) **/
             {
                 .uuid = BLE_UUID16_DECLARE(0x2A4D),
                 .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_READ,
-                .val_handle = &hid_max_count_handle,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
                 .descriptors = (struct ble_gatt_dsc_def[]) {
-                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, .att_flags = BLE_ATT_F_READ },
+                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, 
+                      .arg = (void *)REF_ID_MAX_COUNT, .att_flags = BLE_ATT_F_READ },
                     { 0 }
-                },
+                }
             },
-
-            /** Mouse Input Report: 0x2A4D (ID 0x02) **/
+            /** 5. PTPHQA Feature Report **/
             {
                 .uuid = BLE_UUID16_DECLARE(0x2A4D),
                 .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
-                .val_handle = &hid_mouse_in_handle,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC,
                 .descriptors = (struct ble_gatt_dsc_def[]) {
-                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, .att_flags = BLE_ATT_F_READ },
+                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, 
+                      .arg = (void *)REF_ID_PTPHQA, .att_flags = BLE_ATT_F_READ },
                     { 0 }
-                },
+                }
             },
-
-            /** PTPHQA Feature Report: 0x2A4D (ID 0x04) **/
+            /** 6. Input Mode Feature Report **/
             {
                 .uuid = BLE_UUID16_DECLARE(0x2A4D),
                 .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
-                .val_handle = &hid_ptphqa_handle,
+                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_READ_ENC | BLE_GATT_CHR_F_WRITE | BLE_GATT_CHR_F_WRITE_ENC,
                 .descriptors = (struct ble_gatt_dsc_def[]) {
-                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, .att_flags = BLE_ATT_F_READ },
+                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, 
+                      .arg = (void *)REF_ID_INPUT_MODE, .att_flags = BLE_ATT_F_READ },
                     { 0 }
-                },
+                }
             },
-
-            /** Input Mode Feature Report: 0x2A4D (ID 0x05) **/
-            {
-                .uuid = BLE_UUID16_DECLARE(0x2A4D),
-                .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE,
-                .val_handle = &hid_input_mode_handle,
-                .descriptors = (struct ble_gatt_dsc_def[]) {
-                    { .uuid = BLE_UUID16_DECLARE(0x2908), .access_cb = gatt_svr_access_hid, .att_flags = BLE_ATT_F_READ },
-                    { 0 }
-                },
-            },
-
-            /** Protocol Mode: 0x2A4E **/
-            {
-                .uuid = BLE_UUID16_DECLARE(0x2A4E),
-                .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE_NO_RSP,
-            },
-
-            /** HID Control Point: 0x2A4C **/
-            {
-                .uuid = BLE_UUID16_DECLARE(0x2A4C),
-                .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_WRITE_NO_RSP,
-            },
-            
-            { 0 }
-        },
-    },
-
-    /** Battery Service: 0x180F ***/
-
-    {
-        .type = BLE_GATT_SVC_TYPE_PRIMARY,
-        .uuid = BLE_UUID16_DECLARE(0x180F),
-        .characteristics = (struct ble_gatt_chr_def[]) {
-            {
-                .uuid = BLE_UUID16_DECLARE(0x2A19),
-                .access_cb = gatt_svr_access_hid,
-                .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY,
-            },
+            /** Protocol Mode & Control Point **/
+            { .uuid = BLE_UUID16_DECLARE(0x2A4E), .access_cb = gatt_svr_access_hid, .flags = BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE_NO_RSP },
+            { .uuid = BLE_UUID16_DECLARE(0x2A4C), .access_cb = gatt_svr_access_hid, .flags = BLE_GATT_CHR_F_WRITE_NO_RSP },
             { 0 }
         },
     },

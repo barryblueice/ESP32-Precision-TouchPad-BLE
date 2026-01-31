@@ -20,30 +20,32 @@ void ble_host_task(void *param) {
     vTaskDelete(NULL);
 }
 
-void ble_app_on_sync(void) {
-    uint8_t addr_type = BLE_ADDR_PUBLIC;
+static uint8_t addr_type;
+
+static int ble_app_gap_event(struct ble_gap_event *event, void *arg);
+
+void ble_app_advertise(void) {
+    struct ble_hs_adv_fields fields;
     int rc;
 
-    struct ble_hs_adv_fields fields;
     memset(&fields, 0, sizeof(fields));
+
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
-    
+
+    fields.name = (uint8_t *)"ESP32_Touchpad";
+    fields.name_len = strlen("ESP32_Touchpad");
+    fields.name_is_complete = 1;
+
+    fields.appearance = 0x03C5;
+    fields.appearance_is_present = 1;
+
+    fields.uuids16 = (ble_uuid16_t[]){ BLE_UUID16_INIT(0x1812) };
+    fields.num_uuids16 = 1;
+    fields.uuids16_is_complete = 1;
+
     rc = ble_gap_adv_set_fields(&fields);
     if (rc != 0) {
-        ESP_LOGE(TAG, "error setting main adv fields; rc=%d", rc);
-        return;
-    }
-
-    struct ble_hs_adv_fields rsp_fields;
-    memset(&rsp_fields, 0, sizeof(rsp_fields));
-
-    rsp_fields.name = (uint8_t *)CONFIG_BLE_DEVICE_NAME;
-    rsp_fields.name_len = strlen(CONFIG_BLE_DEVICE_NAME);
-    rsp_fields.name_is_complete = 1;
-
-    rc = ble_gap_adv_rsp_set_fields(&rsp_fields);
-    if (rc != 0) {
-        ESP_LOGE(TAG, "error setting scan rsp; rc=%d. Name too long?", rc);
+        printf("Error setting advertisement data; rc=%d\n", rc);
         return;
     }
 
@@ -51,13 +53,67 @@ void ble_app_on_sync(void) {
     memset(&adv_params, 0, sizeof(adv_params));
     adv_params.conn_mode = BLE_GAP_CONN_MODE_UND;
     adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN;
-
-    rc = ble_gap_adv_start(addr_type, NULL, BLE_HS_FOREVER, &adv_params, NULL, NULL);
+    
+    rc = ble_gap_adv_start(addr_type, NULL, BLE_HS_FOREVER,
+                           &adv_params, ble_app_gap_event, NULL);
     if (rc != 0) {
-        ESP_LOGE(TAG, "error enabling advertisement; rc=%d", rc);
-    } else {
-        ESP_LOGI(TAG, "Adv started! Name: %s", CONFIG_BLE_DEVICE_NAME);
+        printf("Error starting advertisement; rc=%d\n", rc);
     }
+}
+
+static int ble_app_gap_event(struct ble_gap_event *event, void *arg) {
+    int rc;
+
+    switch (event->type) {
+        case BLE_GAP_EVENT_CONNECT:
+            printf("Connected! status=%d\n", event->connect.status);
+            break;
+
+        case BLE_GAP_EVENT_DISCONNECT:
+            printf("Disconnected! reason=%d\n", event->disconnect.reason);
+            ble_app_advertise();
+            break;
+
+        case BLE_GAP_EVENT_PASSKEY_ACTION:
+            printf("PASSKEY_ACTION! action=%d\n", event->passkey.params.action);
+            
+            struct ble_sm_io pkey;
+            memset(&pkey, 0, sizeof(pkey));
+
+            if (event->passkey.params.action == BLE_SM_IOACT_NUMCMP) {
+                pkey.action = event->passkey.params.action;
+                pkey.numcmp_accept = 1;
+                rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
+                printf("Numeric Comparison accepted; rc=%d\n", rc);
+            } else if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
+                pkey.action = event->passkey.params.action;
+                pkey.passkey = 123456; 
+                rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
+                printf("Passkey injected; rc=%d\n", rc);
+            }
+            break;
+
+        case BLE_GAP_EVENT_ENC_CHANGE:
+            printf("Encryption Change! status=%d\n", event->enc_change.status);
+            break;
+
+        case BLE_GAP_EVENT_REPEAT_PAIRING:
+            printf("Repeat pairing requested. Deleting old bond...\n");
+            struct ble_gap_conn_desc desc;
+            ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
+            ble_store_util_delete_peer(&desc.peer_id_addr);
+            return BLE_GAP_REPEAT_PAIRING_RETRY;
+        
+        case BLE_GAP_EVENT_MTU:
+            printf("MTU updated to %d; NOW requesting security...\n", event->mtu.value);
+            break;
+    }
+    return 0;
+}
+
+static void ble_app_on_sync(void) {
+    ble_hs_id_infer_auto(0, &addr_type);
+    ble_app_advertise();
 }
 
 void ble_gatt_init() {
@@ -69,10 +125,12 @@ void ble_gatt_init() {
 
     nimble_port_init();
 
+    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_DISP_ONLY;
     ble_hs_cfg.sm_bonding = 1;
-    ble_hs_cfg.sm_mitm = 0;
+    ble_hs_cfg.sm_mitm = 1;
     ble_hs_cfg.sm_sc = 1;
-    ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
+    ble_hs_cfg.sm_our_key_dist = BLE_SM_PAIR_KEY_DIST_ID | BLE_SM_PAIR_KEY_DIST_ENC;
+    ble_hs_cfg.sm_their_key_dist = BLE_SM_PAIR_KEY_DIST_ID | BLE_SM_PAIR_KEY_DIST_ENC;
 
     ble_svc_gap_init();
     ble_svc_gatt_init();
